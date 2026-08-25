@@ -1,0 +1,15 @@
+PRO POS V6 - EK ÖZELLİKLER
+
+1) Barkod Yazdır sayfasında kamera ile barkod okutma eklendi.
+   - Barkod okutulunca ürün doğrudan Seçilen Ürünler'e eklenir.
+   - Aynı ürün tekrar okutulursa adet +1 olur.
+   - Manuel barkod okuyucu/Enter da doğrudan ekler.
+
+2) Kasa & Gün Sonu sayfasına Kasadan Para Al eklendi.
+   - Tutar zorunlu, not opsiyonel.
+   - Para alma kaydı aktif kasa oturumunun note alanında [PARA_ALMA] işaretleriyle tutulur; yeni SQL/migration gerektirmez.
+   - Kasada olması gereken tutardan kasadan alınan para düşülür.
+   - Para alma kayıtları ve notları aktif oturumda gösterilir.
+   - Kasa kapanırken para alma kayıtları korunur.
+
+Mevcut ürün/satış verilerine dokunulmamıştır.
