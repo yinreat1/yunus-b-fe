@@ -716,60 +716,98 @@ export async function payCustomerDebt(id: string, amount: number, note?: string)
   } catch {
     // Eski veritabanında ödeme tablosu yoksa bakiye yine güncellenmiş olur.
   }
+  // Migration henüz uygulanmadıysa da mümkünse kapanan açık veresiye kayıtlarını işaretle.
+  if (Number(cust.balance || 0) - payment <= 0.01) {
+    const { data: customerRow } = await supabase.from('customers').select('name').eq('id', id).maybeSingle();
+    let settleQuery = supabase.from('sales').update({ settled_at: new Date().toISOString() }).is('settled_at', null).in('payment_method', ['credit','split']);
+    if (customerRow?.name) {
+      settleQuery = settleQuery.or(`customer_id.eq.${id},and(customer_id.is.null,customer_name.eq.${customerRow.name.replace(/,/g, '')})`);
+    } else {
+      settleQuery = settleQuery.eq('customer_id', id);
+    }
+    await settleQuery;
+  }
   return { success: true, amount: payment };
 }
 
 export function useCustomerDebtHistory(customerId: string | null) {
   const [sales, setSales] = useState<SaleWithItems[]>([]);
+  const [archiveSales, setArchiveSales] = useState<SaleWithItems[]>([]);
   const [payments, setPayments] = useState<CustomerPayment[]>([]);
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!customerId) {
-      setSales([]);
-      setPayments([]);
-      setCurrentBalance(null);
+      setSales([]); setArchiveSales([]); setPayments([]); setCurrentBalance(null); setCustomerName('');
       return;
     }
 
     setLoading(true);
     const customerResult = await supabase
       .from('customers')
-      .select('balance')
+      .select('name,balance')
       .eq('id', customerId)
       .maybeSingle();
 
-    let salesResult = await supabase
-      .from('sales')
-      .select('*, sale_items(*)')
-      .eq('customer_id', customerId)
-      .eq('payment_method', 'credit')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+    const name = customerResult.data?.name || '';
+    setCustomerName(name);
 
-    if (salesResult.error && /deleted_at|schema cache|column/i.test(salesResult.error.message || '')) {
-      salesResult = await supabase
+    async function fetchSaleRows(includeSettled: boolean) {
+      const byId = supabase
         .from('sales')
         .select('*, sale_items(*)')
         .eq('customer_id', customerId)
-        .eq('payment_method', 'credit')
-        .order('created_at', { ascending: false });
+        .in('payment_method', ['credit','split'])
+        .order('created_at', { ascending: false })
+        .range(0, 9999);
+
+      let primary = await byId;
+      if (primary.error && /deleted_at|settled_at|schema cache|column/i.test(primary.error.message || '')) {
+        primary = await supabase
+          .from('sales')
+          .select('*, sale_items(*)')
+          .eq('customer_id', customerId)
+          .in('payment_method', ['credit','split'])
+          .order('created_at', { ascending: false });
+      }
+
+      let rows = (primary.data || []) as SaleWithItems[];
+      // Eski sürümlerde müşteri_id yazılmadan yalnızca müşteri adı kaydedilmiş olabilir.
+      if (name) {
+        const legacy = await supabase
+          .from('sales')
+          .select('*, sale_items(*)')
+          .eq('customer_name', name)
+          .in('payment_method', ['credit','split'])
+          .order('created_at', { ascending: false })
+          .range(0, 9999);
+        if (!legacy.error) {
+          const merged = [...rows, ...((legacy.data || []) as SaleWithItems[])];
+          const seen = new Set<string>();
+          rows = merged.filter((x) => !seen.has(x.id) && seen.add(x.id));
+        }
+      }
+
+      rows.sort((a:any,b:any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (!includeSettled) {
+        rows = rows.filter((sale: any) => sale.settled_at == null);
+      } else {
+        rows = rows.filter((sale: any) => sale.settled_at != null);
+      }
+      return rows;
     }
 
-    const { data: paymentData, error: paymentError } = await supabase
-      .from('customer_payments')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false });
+    const [activeSales, settledSales, paymentResult] = await Promise.all([
+      fetchSaleRows(false),
+      fetchSaleRows(true),
+      supabase.from('customer_payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).range(0, 9999),
+    ]);
 
-    if (salesResult.error) console.error('Veresiye geçmişi yüklenemedi:', salesResult.error);
-    if (paymentError && !/customer_payments|schema cache|relation/i.test(paymentError.message || '')) {
-      console.error('Ödeme geçmişi yüklenemedi:', paymentError);
-    }
-
-    setSales((salesResult.data || []) as SaleWithItems[]);
-    setPayments((paymentData || []) as CustomerPayment[]);
+    setSales(activeSales);
+    setArchiveSales(settledSales);
+    setPayments((paymentResult.data || []) as CustomerPayment[]);
     setCurrentBalance(customerResult.data ? Number(customerResult.data.balance || 0) : null);
     setLoading(false);
   }, [customerId]);
@@ -786,8 +824,9 @@ export function useCustomerDebtHistory(customerId: string | null) {
     return () => { supabase.removeChannel(channel); };
   }, [customerId, load]);
 
-  return { sales, payments, currentBalance, loading, reload: load };
+  return { sales, archiveSales, payments, currentBalance, customerName, loading, reload: load };
 }
+
 
 
 // ===== Kasa Oturumları =====

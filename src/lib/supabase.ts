@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://nmwswdjqqcunpupdrbwi.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5td3N3ZGpxcWN1bnB1cGRyYndpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDg1NDUsImV4cCI6MjEwMjMyNDU0NX0.-6LLtBO_9S5rGMEWVg-kJFIhSVDzNnMJB274tqmIDzI';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ukfeuojhigxxxlnhsmls.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_b-cFhb97kOd3mLQnBi_SGQ_8oNQPkzS';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -42,6 +42,7 @@ export type Sale = {
   created_at: string;
   deleted_at: string | null;
   deleted_reason: string | null;
+  settled_at: string | null;
   refunded_at: string | null;
   refund_amount: number | null;
   refund_reason: string | null;
