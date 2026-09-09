@@ -760,7 +760,8 @@ export function useCustomerDebtHistory(customerId: string | null) {
         .select('*, sale_items(*)')
         .eq('customer_id', customerId)
         .in('payment_method', ['credit','split'])
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(0, 9999);
 
       let primary = await byId;
       if (primary.error && /deleted_at|settled_at|schema cache|column/i.test(primary.error.message || '')) {
@@ -780,7 +781,8 @@ export function useCustomerDebtHistory(customerId: string | null) {
           .select('*, sale_items(*)')
           .eq('customer_name', name)
           .in('payment_method', ['credit','split'])
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(0, 9999);
         if (!legacy.error) {
           const merged = [...rows, ...((legacy.data || []) as SaleWithItems[])];
           const seen = new Set<string>();
@@ -788,6 +790,7 @@ export function useCustomerDebtHistory(customerId: string | null) {
         }
       }
 
+      rows.sort((a:any,b:any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (!includeSettled) {
         rows = rows.filter((sale: any) => sale.settled_at == null);
       } else {
@@ -799,7 +802,7 @@ export function useCustomerDebtHistory(customerId: string | null) {
     const [activeSales, settledSales, paymentResult] = await Promise.all([
       fetchSaleRows(false),
       fetchSaleRows(true),
-      supabase.from('customer_payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }),
+      supabase.from('customer_payments').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).range(0, 9999),
     ]);
 
     setSales(activeSales);
