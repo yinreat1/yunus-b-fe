@@ -68,11 +68,81 @@ export default function SettingsPage() {
   }
 
 
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+
   async function exportBackup() {
-    const tables = ['categories','products','customers','sales','sale_items','customer_payments','cash_sessions','sale_payments','stock_movements','sale_returns','staff','audit_logs'];
-    const payload:any = { exported_at:new Date().toISOString(), app:'Pro POS', data:{} };
-    for(const table of tables){ const {data,error}=await supabase.from(table).select('*').limit(50000); if(!error) payload.data[table]=data||[]; }
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`propos-yedek-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setBackupStatus('Yedek hazırlanıyor…');
+
+    const tables = [
+      'categories','products','customers','sales','sale_items','customer_payments',
+      'cash_sessions','sale_payments','stock_movements','sale_returns','staff','audit_logs'
+    ];
+    const data: Record<string, unknown[]> = {};
+    const errors: Array<{ table: string; message: string }> = [];
+
+    // Fetch in pages so large stores are not truncated by API limits.
+    const PAGE_SIZE = 1000;
+    for (const table of tables) {
+      const rows: unknown[] = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data: page, error } = await supabase
+          .from(table)
+          .select('*')
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) {
+          errors.push({ table, message: error.message || 'Bilinmeyen hata' });
+          break;
+        }
+        rows.push(...(page || []));
+        if (!page || page.length < PAGE_SIZE) break;
+      }
+      data[table] = rows;
+    }
+
+    // Preserve device-local data used by settings/offline/personnel fallback.
+    const localData: Record<string, unknown> = {};
+    for (const key of ['pos-settings', 'propos-staff-local-v1', 'propos-offline-sales-v2']) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) localData[key] = JSON.parse(raw);
+      } catch {
+        localData[key] = null;
+      }
+    }
+
+    // Never export master-password secrets.
+    const payload = {
+      backup_version: 2,
+      exported_at: new Date().toISOString(),
+      app: 'Pro POS',
+      source: {
+        database: 'Supabase',
+        note: 'Master password/PIN secretleri yedeğe dahil edilmez.'
+      },
+      data,
+      local_data: localData,
+      errors
+    };
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `propos-sistem-yedegi-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setBackupStatus(errors.length
+      ? `Yedek indirildi. ${errors.length} tabloda veri alınamadı; dosyadaki errors alanını kontrol et.`
+      : `Yedek başarıyla indirildi. ${Object.values(data).reduce((sum, rows) => sum + rows.length, 0)} kayıt dahil edildi.`
+    );
+    setBackupBusy(false);
   }
 
   async function handleClearAll() {
@@ -217,9 +287,17 @@ export default function SettingsPage() {
           </div>
 
           <div className="card p-6">
-            <div className="mb-3 flex items-center gap-2"><Database className="text-teal-600" size={20}/><h2 className="text-lg font-bold text-slate-800">Yedekleme</h2></div>
-            <p className="mb-4 text-sm text-slate-500">Ürün, satış, cari, stok hareketleri, personel ve kasa verilerini tek JSON dosyasında dışa aktar.</p>
-            <button onClick={exportBackup} className="btn-primary px-4 py-2">Yedek Dosyası Oluştur</button>
+            <div className="mb-3 flex items-center gap-2"><Database className="text-teal-600" size={20}/><h2 className="text-lg font-bold text-slate-800">Sistem Yedekleme</h2></div>
+            <p className="mb-4 text-sm text-slate-500">Ürün, satış, cari, stok, personel, kasa ve cihazdaki offline verileri tek JSON dosyasında indir.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={exportBackup} disabled={backupBusy} className="btn-primary px-4 py-2 disabled:opacity-60">
+                {backupBusy ? 'Yedek hazırlanıyor…' : 'Yedekleme İndir'}
+              </button>
+              {backupStatus && <span className="text-sm text-slate-600">{backupStatus}</span>}
+            </div>
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Yedek dosyası müşteri, satış ve cari bilgileri içerebilir. Güvenli bir yerde sakla. Master şifre/PIN sırları yedeğe dahil edilmez.
+            </div>
           </div>
 
           {/* System Info */}

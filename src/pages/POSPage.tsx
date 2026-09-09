@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, X, CreditCard, Banknote, BookOpen, Printer, Receipt, Share2, PauseCircle, PlayCircle } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, X, CreditCard, Banknote, BookOpen, Printer, Receipt, Share2 } from 'lucide-react';
 import { useProducts, useCategories, useCustomers, completeSale, queueOfflineSale, syncOfflineSales, type CartItem, type PaymentSplit } from '@/lib/hooks';
 import { formatCurrency, PAYMENT_METHODS, getEffectivePrice, type PaymentMethod } from '@/lib/utils';
 import type { Product, SaleWithItems } from '@/lib/supabase';
@@ -19,10 +19,6 @@ export default function POSPage({ onNavigate }: Props) {
   const [lastSale, setLastSale] = useState<SaleWithItems | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [processingSale, setProcessingSale] = useState(false);
-  const [heldSales, setHeldSales] = useState<{id:string; created_at:string; items:CartItem[]}[]>(() => {
-    try { return JSON.parse(localStorage.getItem('propos-held-sales-v1') || '[]'); } catch { return []; }
-  });
-  const [showHeldSales, setShowHeldSales] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -85,38 +81,6 @@ export default function POSPage({ onNavigate }: Props) {
 
   function clearCart() {
     setCart([]);
-  }
-
-  function persistHeldSales(next: {id:string; created_at:string; items:CartItem[]}[]) {
-    setHeldSales(next);
-    try { localStorage.setItem('propos-held-sales-v1', JSON.stringify(next)); } catch {}
-  }
-
-  function holdCurrentSale() {
-    if (!cart.length) return;
-    const entry = { id: crypto.randomUUID(), created_at: new Date().toISOString(), items: cart.map(i => ({ ...i })) };
-    persistHeldSales([entry, ...heldSales]);
-    setCart([]);
-    setShowHeldSales(false);
-    searchRef.current?.focus();
-  }
-
-  function resumeHeldSale(id: string) {
-    const entry = heldSales.find(x => x.id === id);
-    if (!entry) return;
-    if (cart.length) {
-      const replace = window.confirm('Mevcut sepet var. Bekletilen satışı geri yüklemek mevcut sepeti değiştirecek. Devam edilsin mi?');
-      if (!replace) return;
-    }
-    setCart(entry.items);
-    persistHeldSales(heldSales.filter(x => x.id !== id));
-    setShowHeldSales(false);
-    searchRef.current?.focus();
-  }
-
-  function deleteHeldSale(id: string) {
-    if (!window.confirm('Bekletilen satış silinsin mi?')) return;
-    persistHeldSales(heldSales.filter(x => x.id !== id));
   }
 
   function handleBarcodeScan(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -226,23 +190,11 @@ export default function POSPage({ onNavigate }: Props) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {heldSales.length > 0 && (
-              <button onClick={() => setShowHeldSales(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:text-violet-800">
-                <PlayCircle size={15}/> Bekletilen ({heldSales.length})
-              </button>
-            )}
-            {cart.length > 0 && (
-              <div className="flex items-center gap-3">
-                <button onClick={holdCurrentSale} className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 hover:text-amber-700">
-                  <PauseCircle size={16}/> Askıya Al
-                </button>
-                <button onClick={clearCart} className="text-sm text-red-500 hover:text-red-600">
-                  Temizle
-                </button>
-              </div>
-            )}
-          </div>
+          {cart.length > 0 && (
+            <button onClick={clearCart} className="text-sm text-red-500 hover:text-red-600">
+              Temizle
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
@@ -316,33 +268,6 @@ export default function POSPage({ onNavigate }: Props) {
           </button>
         </div>
       </div>
-
-      {showHeldSales && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowHeldSales(false)}>
-          <div className="card w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">Bekletilen Satışlar</h2>
-                <p className="text-sm text-slate-500">Ödemeyi daha sonra tamamlamak için askıya aldığın sepetler.</p>
-              </div>
-              <button onClick={() => setShowHeldSales(false)} className="text-slate-400 hover:text-slate-600"><X size={22}/></button>
-            </div>
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto">
-              {heldSales.length === 0 ? <div className="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-400">Bekletilen satış yok.</div> : heldSales.map((entry) => {
-                const total = entry.items.reduce((sum, item) => sum + getEffectivePrice(item.product) * (1 - (Number(item.discountPercent || 0) / 100)) * item.quantity, 0);
-                return <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div><p className="font-semibold text-slate-700">{entry.items.length} ürün · {entry.items.reduce((n,i)=>n+i.quantity,0)} adet</p><p className="text-xs text-slate-400">{new Date(entry.created_at).toLocaleString('tr-TR')}</p></div>
-                    <p className="font-bold text-teal-700">{formatCurrency(total)}</p>
-                  </div>
-                  <div className="mb-3 text-xs text-slate-500">{entry.items.map(i => `${i.quantity}× ${i.product.name}`).join(' · ')}</div>
-                  <div className="flex gap-2"><button onClick={() => resumeHeldSale(entry.id)} className="btn-primary flex-1 py-2"><PlayCircle size={16}/> Geri Al</button><button onClick={() => deleteHeldSale(entry.id)} className="btn-secondary py-2 text-red-600">Sil</button></div>
-                </div>;
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Payment Modal */}
       {showPayment && (

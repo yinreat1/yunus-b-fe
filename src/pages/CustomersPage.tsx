@@ -90,8 +90,9 @@ function CustomerForm({ customer, onClose, onSaved }: { customer: Customer | nul
 }
 
 function shareCustomerDebtWhatsApp(customer: Customer, sales: any[], payments: any[], balance: number) {
-  const digits = (customer.phone || '').replace(/\D/g, '');
-  const phone = digits ? (digits.startsWith('0') ? `90${digits.slice(1)}` : digits.startsWith('90') ? digits : `90${digits}`) : ''; 
+  if (!customer.phone) { alert('WhatsApp göndermek için müşterinin telefon numarasını kaydedin.'); return; }
+  const digits = customer.phone.replace(/\D/g, '');
+  const phone = digits.startsWith('0') ? `90${digits.slice(1)}` : digits.startsWith('90') ? digits : `90${digits}`;
   const lines = [
     `*${customer.name} Borç Özeti*`, '',
     ...sales.flatMap((sale: any) => [
@@ -103,21 +104,17 @@ function shareCustomerDebtWhatsApp(customer: Customer, sales: any[], payments: a
     ...payments.map((p: any) => `✅ ${formatDateTime(p.created_at)} — ${formatCurrency(p.amount)}${p.note ? ` (${p.note})` : ''}`),
     '', `*Kalan Borç: ${formatCurrency(balance)}*`, '', 'Pro POS'
   ].filter(Boolean);
-  const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}` : `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`;
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) window.location.href = url;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener,noreferrer');
 }
 
 function CustomerDetail({ customer, onClose, onChanged }: { customer: Customer; onClose: () => void; onChanged: () => void }) {
-  const { sales, archiveSales, payments, currentBalance: liveBalance, loading, reload } = useCustomerDebtHistory(customer.id);
-  const [historyTab, setHistoryTab] = useState<'active'|'archive'>('active');
+  const { sales, payments, currentBalance: liveBalance, loading, reload } = useCustomerDebtHistory(customer.id);
   const [payAmount, setPayAmount] = useState('');
   const [payNote, setPayNote] = useState('');
   const [payMode, setPayMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const currentBalance = Math.max(0, Number(liveBalance ?? customer.balance ?? 0));
-  const totalPurchases = [...sales, ...archiveSales].reduce((sum, sale) => sum + Number(sale.total || 0), 0);
-  const openPurchases = sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const totalPurchases = sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
   async function handlePayment() {
@@ -128,18 +125,16 @@ function CustomerDetail({ customer, onClose, onChanged }: { customer: Customer; 
     setSaving(false);
     if (!result.success) return;
     setPayAmount(''); setPayNote(''); setPayMode(false);
-    await reload();
-    setHistoryTab('active');
-    onChanged();
+    await reload(); onChanged();
   }
 
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
     <div className="card flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-start justify-between border-b border-slate-200 bg-white px-5 py-4"><div><h2 className="text-xl font-bold text-slate-800">{customer.name}</h2>{customer.phone && <p className="text-sm text-slate-500">{customer.phone}</p>}</div><div className="flex items-center gap-2"><button onClick={() => shareCustomerDebtWhatsApp(customer, sales, payments, currentBalance)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40"><MessageCircle size={16}/> WhatsApp Borç Özeti</button><button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={22} /></button></div></div>
+      <div className="flex items-start justify-between border-b border-slate-200 bg-white px-5 py-4"><div><h2 className="text-xl font-bold text-slate-800">{customer.name}</h2>{customer.phone && <p className="text-sm text-slate-500">{customer.phone}</p>}</div><div className="flex items-center gap-2"><button onClick={() => shareCustomerDebtWhatsApp(customer, sales, payments, currentBalance)} disabled={!customer.phone} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40"><MessageCircle size={16}/> WhatsApp Borç Özeti</button><button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={22} /></button></div></div>
 
       <div className="grid gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:grid-cols-4">
         <Stat label="Kalan borç" value={formatCurrency(currentBalance)} accent="amber" />
-        <Stat label="Toplam veresiye" value={formatCurrency(openPurchases)} accent="slate" />
+        <Stat label="Toplam veresiye" value={formatCurrency(totalPurchases)} accent="slate" />
         <Stat label="Toplam ödeme" value={formatCurrency(totalPayments)} accent="emerald" />
         <button disabled={currentBalance <= 0} onClick={() => { setPayAmount(currentBalance.toFixed(2)); setPayMode(true); }} className="btn-success min-h-[76px] flex-col py-2 disabled:opacity-40"><Wallet size={20} /> {currentBalance > 0 ? 'Borç Öde' : 'Borç Yok'}</button>
       </div>
@@ -147,27 +142,18 @@ function CustomerDetail({ customer, onClose, onChanged }: { customer: Customer; 
       <div className="flex-1 overflow-y-auto p-4">
         {payMode && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="mb-3 flex items-center gap-2 font-semibold text-emerald-800"><CreditCard size={18} /> Borç Ödeme Kaydı</div><div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Ödeme tutarı</label><input type="number" min="0.01" max={currentBalance} step="0.01" className="input text-lg" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} autoFocus /></div><div><label className="label">Not (opsiyonel)</label><input className="input" placeholder="Nakit ödeme, kapatma vb." value={payNote} onChange={(e) => setPayNote(e.target.value)} /></div></div><div className="mt-3 flex gap-2"><button onClick={handlePayment} disabled={saving || Number(payAmount) <= 0} className="btn-success px-4 py-2">{saving ? 'Kaydediliyor...' : 'Ödemeyi Kaydet'}</button><button onClick={() => setPayMode(false)} className="btn-secondary px-4 py-2">İptal</button></div></div>}
 
-        <div className="mb-6">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2"><ReceiptText size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">Cari Geçmişi</h3></div>
-            <div className="inline-flex rounded-lg bg-slate-100 p-1">
-              <button onClick={() => setHistoryTab('active')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${historyTab === 'active' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500'}`}>Açık Hesap</button>
-              <button onClick={() => setHistoryTab('archive')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${historyTab === 'archive' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Eski Sayfalar / Arşiv ({archiveSales.length})</button>
-            </div>
-          </div>
-          {loading ? <p className="py-8 text-center text-slate-400">Geçmiş yükleniyor...</p> : (historyTab === 'active' ? sales : archiveSales).length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">{historyTab === 'active' ? (currentBalance <= 0 ? 'Bu müşterinin açık borcu yok. Eski alışverişleri “Eski Sayfalar” bölümünde görebilirsiniz.' : 'Açık veresiye alışverişi bulunmuyor.') : 'Henüz kapanmış hesap sayfası yok.'}</div> : <div className="space-y-3">{(historyTab === 'active' ? sales : archiveSales).map((sale) => <SaleHistoryCard key={sale.id} sale={sale} archived={historyTab === 'archive'} />)}</div>}
-        </div>
+        <div className="mb-6"><div className="mb-3 flex items-center gap-2"><ReceiptText size={18} className="text-amber-600" /><h3 className="font-bold text-slate-800">Veresiye Alışverişleri</h3></div>{loading ? <p className="py-8 text-center text-slate-400">Geçmiş yükleniyor...</p> : sales.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">Bu müşteriye ait veresiye satış kaydı yok.</div> : <div className="space-y-3">{sales.map((sale) => <SaleHistoryCard key={sale.id} sale={sale} />)}</div>}</div>
 
         <div><div className="mb-3 flex items-center gap-2"><Wallet size={18} className="text-emerald-600" /><h3 className="font-bold text-slate-800">Borç Ödeme Geçmişi</h3></div>{payments.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400">Henüz ödeme kaydı yok.</div> : <div className="overflow-hidden rounded-xl border border-slate-200"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-2 text-left">Tarih / Saat</th><th className="px-3 py-2 text-left">Not</th><th className="px-3 py-2 text-right">Ödeme</th></tr></thead><tbody>{payments.map((payment) => <tr key={payment.id} className="border-t border-slate-100"><td className="px-3 py-2 text-slate-600"><span className="flex items-center gap-1"><Clock size={14} />{formatDateTime(payment.created_at)}</span></td><td className="px-3 py-2 text-slate-500">{payment.note || '-'}</td><td className="px-3 py-2 text-right font-bold text-emerald-600">-{formatCurrency(payment.amount)}</td></tr>)}</tbody></table></div>}</div>
       </div>
 
-      <div className="border-t-2 border-slate-300 bg-white px-5 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="text-sm text-slate-500">Hesap özeti</div><div className="flex flex-wrap items-end gap-6"><div><p className="text-xs text-slate-400">Tüm zamanlar alışveriş</p><p className="font-semibold text-slate-700">{formatCurrency(totalPurchases)}</p></div><div><p className="text-xs text-slate-400">Toplam ödeme</p><p className="font-semibold text-emerald-600">{formatCurrency(totalPayments)}</p></div><div className="text-right"><p className="text-xs text-amber-600">KALAN BORÇ</p><p className="text-2xl font-black text-amber-700">{formatCurrency(currentBalance)}</p></div></div></div></div>
+      <div className="border-t-2 border-slate-300 bg-white px-5 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="text-sm text-slate-500">Hesap özeti</div><div className="flex flex-wrap items-end gap-6"><div><p className="text-xs text-slate-400">Toplam alışveriş</p><p className="font-semibold text-slate-700">{formatCurrency(totalPurchases)}</p></div><div><p className="text-xs text-slate-400">Toplam ödeme</p><p className="font-semibold text-emerald-600">{formatCurrency(totalPayments)}</p></div><div className="text-right"><p className="text-xs text-amber-600">KALAN BORÇ</p><p className="text-2xl font-black text-amber-700">{formatCurrency(currentBalance)}</p></div></div></div></div>
     </div>
   </div>;
 }
 
-function SaleHistoryCard({ sale, archived = false }: { sale: any; archived?: boolean }) {
-  return <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="flex items-center gap-2 font-semibold text-slate-800"><Clock size={15} className="text-slate-400" /> {formatDateTime(sale.created_at)}</p><p className="mt-1 text-xs text-slate-400">{archived ? `Kapanmış hesap · ${formatDateTime(sale.settled_at)}` : 'Açık veresiye satış'}</p></div><div className="text-right"><p className="text-xs text-slate-400">Satış toplamı</p><p className="text-lg font-black text-amber-700">{formatCurrency(sale.total)}</p></div></div><div className="divide-y divide-slate-100 rounded-lg bg-slate-50">{(sale.sale_items || []).map((item: any) => <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-slate-700">{item.quantity} × {item.product_name}</p>{item.barcode && <p className="font-mono text-[11px] text-slate-400">{item.barcode}</p>}</div><span className="shrink-0 font-semibold text-slate-700">{formatCurrency(item.subtotal)}</span></div>)}</div></div>;
+function SaleHistoryCard({ sale }: { sale: any }) {
+  return <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="flex items-center gap-2 font-semibold text-slate-800"><Clock size={15} className="text-slate-400" /> {formatDateTime(sale.created_at)}</p><p className="mt-1 text-xs text-slate-400">Veresiye satış</p></div><div className="text-right"><p className="text-xs text-slate-400">Satış toplamı</p><p className="text-lg font-black text-amber-700">{formatCurrency(sale.total)}</p></div></div><div className="divide-y divide-slate-100 rounded-lg bg-slate-50">{(sale.sale_items || []).map((item: any) => <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-slate-700">{item.quantity} × {item.product_name}</p>{item.barcode && <p className="font-mono text-[11px] text-slate-400">{item.barcode}</p>}</div><span className="shrink-0 font-semibold text-slate-700">{formatCurrency(item.subtotal)}</span></div>)}</div></div>;
 }
 
 function Stat({ label, value, accent }: { label: string; value: string; accent: 'amber' | 'emerald' | 'slate' }) {

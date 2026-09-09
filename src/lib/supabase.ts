@@ -42,7 +42,6 @@ export type Sale = {
   created_at: string;
   deleted_at: string | null;
   deleted_reason: string | null;
-  settled_at: string | null;
   refunded_at: string | null;
   refund_amount: number | null;
   refund_reason: string | null;
