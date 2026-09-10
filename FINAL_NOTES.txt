@@ -1,0 +1,35 @@
+PRO POS - FULL GELİŞTİRME NOTLARI
+
+Bu sürüm, önceki barkod/indirim/veresiye sürümünün üzerine aşağıdaki özellikleri ekler:
+- ürün satış indirimleri: aktif indirimli fiyat, tarih/saat bitişi
+- POS satırında anlık iskonto yüzdesi
+- karma ödeme: nakit + kart + veresiye
+- çoklu barkod (ek barkodlar)
+- stok girişi ve stok düzeltme ekranı
+- stok hareketleri tablosu + satış/iade hareketleri
+- kritik stok seviyesi varsayılanı 0
+- ürün alış/satış/kâr hesap altyapısı
+- kg/gr/lt/ml gibi birimlerde ondalıklı satış
+- kısmi iade RPC ve iade sonrası stok geri alma
+- personel tablosu ve Personel & Yetki ekranı
+- audit/stok/satış ödeme tabloları için Supabase altyapısı
+- JSON veri yedekleme
+- çevrimdışı satış kuyruğu ve bağlantı gelince otomatik senkronizasyon
+- WhatsApp ile fiş metni paylaşma
+- raporlarda en çok satanlar / en çok kazandıranlar
+
+SUPABASE:
+Migration sırası mevcut dosya sırasıyla devam eder. Yeni migration:
+20260906130000_propos_full_features.sql
+
+ÖNEMLİ:
+1) Supabase migration'larını çalıştırmadan yeni tablolar/kolonlar kullanılmaz.
+2) Gerçek ticari yayından önce Supabase RLS politikaları anon kullanıcıdan çıkarılıp Supabase Auth + rol bazlı politikalarla sıkılaştırılmalıdır.
+3) Bu çalışma ortamında npm bağımlılıkları kurulum sırasında ağ zaman aşımına uğradığı için production Vite build testi tamamlanamadı.
+
+LABEL v11 NOTES
+- Etiket barkod alanı özellikle ekonomik 3x9 şablonda genişletildi ve barkod kalınlığı artırıldı.
+- Barkod ön eki ayarı kaldırıldı; yeni barkod oluşturma artık ön ek kullanmadan standart 13 haneli EAN-13 üretir.
+- Mağaza adı varsayılanı FERHAT BÜFE olarak güncellendi.
+
+- Economic label height increased to 32mm (vertical only); width unchanged at 64.5mm.
