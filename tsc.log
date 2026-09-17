@@ -1,0 +1,11 @@
+src/lib/hooks.ts(1,50): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/lib/hooks.ts(2,26): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
+src/lib/hooks.ts(3,146): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
+src/lib/hooks.ts(4,35): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/pages/POSPage.tsx(1,54): error TS2307: Cannot find module 'react' or its corresponding type declarations.
+src/pages/POSPage.tsx(2,120): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+src/pages/POSPage.tsx(3,142): error TS2307: Cannot find module '@/lib/hooks' or its corresponding type declarations.
+src/pages/POSPage.tsx(4,88): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/pages/POSPage.tsx(5,45): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
+src/pages/POSPage.tsx(86,33): error TS2503: Cannot find namespace 'React'.
+src/pages/POSPage.tsx(97,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
